@@ -1,0 +1,9 @@
+{
+    "me": "aws-php",
+    "require": {
+        "aws/aws-sdk-php": "^2.0",
+        "php-amqplib/php-amqplib": "2.5.*",
+        "jenner/simple_fork": "1.1.2"
+    }
+}
+
