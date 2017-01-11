@@ -2,9 +2,12 @@
 
 namespace QueueSystem;
 
+//require_once dirname(dirname(__FILE__)) . '/Message.php';
+
 class WorkProcess extends \Jenner\SimpleFork\Process
 {
 	//Contains the message data received from Queue.
+	//object of QueueSystem\Message
     private $message;
     //Callback to process message data.
     private $callback;
@@ -17,7 +20,7 @@ class WorkProcess extends \Jenner\SimpleFork\Process
      * @param string|array $message
      * @return \QueueSystem\WorkProcess
      */
-    public function setMessage($message) {
+    public function setMessage(QueueSystem\Message $message) {
         $this->message = $message;
         return $this;
     } 

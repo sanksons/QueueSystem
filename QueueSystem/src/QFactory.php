@@ -1,7 +1,7 @@
 <?php
 namespace QueueSystem;
 
-require_once 'SQS/SQS.php';
+//require_once 'SQS/SQS.php';
 
 class QFactory
 {

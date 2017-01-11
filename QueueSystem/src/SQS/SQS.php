@@ -5,11 +5,13 @@ namespace QueueSystem\SQS;
  * Load the required classes.
  * @todo: Use autoloading if time permits.
  */
-require_once('vendor/autoload.php');
-require_once dirname(dirname(__FILE__)) . '/QueueInterface.php';
-require_once dirname(dirname(__FILE__)) . '/WorkerPool.php';
-require_once dirname(dirname(__FILE__)) . '/WorkProcess.php';
-require_once dirname(dirname(__FILE__)) . '/SQS/SleepTimer.php';
+//require_once('vendor/autoload.php');
+//require_once dirname(dirname(__FILE__)) . '/QueueInterface.php';
+//require_once dirname(dirname(__FILE__)) . '/WorkerPool.php';
+//require_once dirname(dirname(__FILE__)) . '/WorkProcess.php';
+//require_once dirname(dirname(__FILE__)) . '/Message.php';
+//require_once dirname(dirname(__FILE__)) . '/SQS/SleepTimer.php';
+
 
 /**
  *  SQS Q Implementation.
@@ -47,6 +49,8 @@ class SQS implements \QueueSystem\QueueInterface
      * $options['pollSettings'] : Settings related to polling.
      *  - formula : poll formula to use.
      *  - variant : poll formula variant.
+     *  
+     * $options['maxWorkers'] : max. allowed parallel workers.  
      * 
      * @param array $options
      */
@@ -60,11 +64,19 @@ class SQS implements \QueueSystem\QueueInterface
         
         //declare SleepTimer object
         $pollSettings = NULL;
-        if (!empty($options['pollSettings'])) {
-            $pollSettings = $options['pollSettings'];
+        if (! empty($options['pollSettings']['formula']) &&
+                         ! empty($options['pollSettings']['variant'])) {
+            $this->sleepTimer = new SleepTimer($options['pollSettings']['formula'], 
+                            $options['pollSettings']['variant']);
+        } else {
+            $this->sleepTimer = new SleepTimer();
         }
-        $this->sleepTimer = new SleepTimer($pollSettings);
-        $this->workerPool = new \QueueSystem\WorkerPool(self::MAX_CHILDS);
+        //define max allowed workers.
+        $maxWorkers = self::MAX_CHILDS;
+        if (!empty($options['maxWorkers'])) {
+            $maxWorkers = (int) $options['maxWorkers'];
+        }
+        $this->workerPool = new \QueueSystem\WorkerPool($maxWorkers);
     }
 
     /**
@@ -102,7 +114,7 @@ class SQS implements \QueueSystem\QueueInterface
      * @param string $message
      * @return boolean| Exception
      */
-    public function publish($message)
+    public function publish($payload)
     {
         if (!$this->isQueueDeclared()) {
             throw new \Exception(
@@ -111,7 +123,7 @@ class SQS implements \QueueSystem\QueueInterface
         }
         $this->client->sendMessage(array(
             'QueueUrl' => $this->qURL,
-            'MessageBody' => $message,
+            'MessageBody' => $payload,
         ));
         return true;
     }
@@ -187,9 +199,14 @@ class SQS implements \QueueSystem\QueueInterface
         $pool = $this->workerPool;
         foreach ($this->messages as $message) {
             try {
+                $msg = new \QueueSystem\Message(array(
+                    'body' => $message['Body'],
+                    'messageId' => $message['MessageId'],
+                    'meta' => array('ReceiptHandle' => $message['ReceiptHandle'])
+                ));
                 $workProcess = new \QueueSystem\WorkProcess();
                 $workProcess->setcallback($callback)
-                    ->setMessage($message)
+                    ->setMessage($msg)
                     ->onJobDone(array($this, 'markDeleted'));
                 $pool->execute($workProcess);
             } catch (\Exception $e) {
@@ -211,11 +228,16 @@ class SQS implements \QueueSystem\QueueInterface
      * @param array $message
      * @return type
      */
-    public function markDeleted($message)
+    public function markDeleted(\QueueSystem\Message $message)
     {
+        $meta = $message->getMetaInfo();
+        $receiptHandle = "";
+        if (isset($meta['ReceiptHandle'])) {
+            $receiptHandle = $meta['ReceiptHandle'];
+        }
         $this->client->deleteMessage(array(
             'QueueUrl' => $this->qURL,
-            'ReceiptHandle' => $message['ReceiptHandle'],
+            'ReceiptHandle' => $receiptHandle,
         ));
         return true;
     }

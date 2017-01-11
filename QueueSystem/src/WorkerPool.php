@@ -2,7 +2,7 @@
 
 namespace QueueSystem;
 
-require_once('vendor/autoload.php');
+//require_once('vendor/autoload.php');
 
 class WorkerPool extends \Jenner\SimpleFork\FixedPool
 {
