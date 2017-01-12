@@ -243,7 +243,8 @@ class SQS implements \QueueSystem\QueueInterface
                 $workProcess = new \QueueSystem\WorkProcess();
                 $workProcess->setcallback($callback)
                     ->setMessage($msg)
-                    ->onJobDone(array($this, 'markDeleted'));
+                    ->onJobDone(array($this, 'markDeleted'))
+                    ->setLogger($this->logger);
                 $pool->execute($workProcess);
             } catch (\Exception $e) {
             	echo 'process message failed;';

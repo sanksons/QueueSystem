@@ -12,6 +12,8 @@ class WorkProcess extends \Jenner\SimpleFork\Process
     //Action to be taken when job is complete.
     private $onJobDone;
     
+    private $logger;
+    
     /**
      * Exposed method to set Message.
      * 
@@ -45,6 +47,10 @@ class WorkProcess extends \Jenner\SimpleFork\Process
         return $this;
     }
     
+    public function setLogger($logger) {
+        $this->logger = $logger;
+    }
+    
     /**
      * This method is called through jenner library when the process execution is started.
      * 
@@ -54,12 +60,17 @@ class WorkProcess extends \Jenner\SimpleFork\Process
     public function run()
     {
         try {
+            $this->logger->info('Processing message:', $this->message->getMessageId());
             $result = call_user_func($this->callback, $this->message);
             call_user_func($this->onJobDone, $this->message);
             return true;
-        } catch (Exception $e) {
-            echo "Exception[{$e->getCode()}]:  " . $e->getMessage();
-            echo PHP_EOL;
+        } catch (\Exception $e) {
+            $exceptionData = array(
+                'ErrorMsg' => $e->getMessage(),
+                'ErrorCode' => $e->getCode(),
+                'MessagePayload' => $this->message->getBody(),
+            );
+            $this->logger->critical("ERR: Exception occured in: \QueueSystem\WorkProcess::run()", $exceptionData);
         }
     }
 }
