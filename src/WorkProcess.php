@@ -2,8 +2,6 @@
 
 namespace QueueSystem;
 
-//require_once dirname(dirname(__FILE__)) . '/Message.php';
-
 class WorkProcess extends \Jenner\SimpleFork\Process
 {
 	//Contains the message data received from Queue.

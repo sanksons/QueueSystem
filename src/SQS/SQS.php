@@ -4,7 +4,10 @@ namespace QueueSystem\SQS;
 use QueueSystem\Utils;
 
 /**
- *  SQS Q Implementation.
+ * SQS Implementation for Queue System.
+ * 
+ * @author Sankalp Bhatt
+ *
  */
 class SQS implements \QueueSystem\QueueInterface
 {
@@ -45,6 +48,11 @@ class SQS implements \QueueSystem\QueueInterface
      *  - formula : poll formula to use.
      *  - variant : poll formula variant.
      *  
+     * $options['logger'] : settings for logger.
+     *    - filePath : path to write log file.
+     *    - level    : log level to be used.
+     *    - fileName :  filename without extension.
+     *  
      * $options['maxWorkers'] : max. allowed parallel workers.  
      * 
      * @param array $options
@@ -53,7 +61,8 @@ class SQS implements \QueueSystem\QueueInterface
     {
         //initiate logger
         //@todo: bring path and level from outside.
-        $this->logger = \QueueSystem\Utils::getLogger();
+        $ls = self::getLoggerSettings($options);
+        $this->logger = \QueueSystem\Utils::getLogger($ls['filePath'], $ls['level'],$ls['fileName']);
         $this->logger->info('Creating SQS instance with following options:', $options);
         
         $clientOptions = array();
@@ -66,6 +75,7 @@ class SQS implements \QueueSystem\QueueInterface
         $pollSettings = NULL;
         if (! empty($options['pollSettings']['formula']) &&
                          ! empty($options['pollSettings']['variant'])) {
+            $this->logger->info('Using following Poll Settings:', $pollSettings);                 
             $this->sleepTimer = new SleepTimer($options['pollSettings']['formula'], 
                             $options['pollSettings']['variant']);
         } else {
@@ -76,9 +86,30 @@ class SQS implements \QueueSystem\QueueInterface
         if (!empty($options['maxWorkers'])) {
             $maxWorkers = (int) $options['maxWorkers'];
         }
+        $this->logger->info('Creating Worker Pool with worker count :', $maxWorkers);
         $this->workerPool = new \QueueSystem\WorkerPool($maxWorkers);
         
         
+    }
+    
+    /**
+     * Prepare logger specific settings.
+     * 
+     * @param array $options
+     * @return array
+     */
+    private static function getLoggerSettings($options = array()) {
+        $ret = array(
+            'filePath' =>  Utils::DEF_PATH,
+            'level' =>     Utils::DEF_LEVEL,
+            'fileName' =>  Utils::DEF_FILE_NAME,
+        );
+        foreach($ret as $key => $val) {
+            if (!empty($options['logger'][$key])) {
+                $ret[$key] = $options['logger'][$key];
+            }
+        }
+        return $ret;
     }
 
     /**
@@ -123,6 +154,8 @@ class SQS implements \QueueSystem\QueueInterface
             self::ERR_MSG_QNOT_DECLARED
             );
         }
+        $this->logger->info("[pid:{".getmypid()."}] Publishing Message.");
+        $this->logger->debug("Published Message Content:", $payload);
         $this->client->sendMessage(array(
             'QueueUrl' => $this->qURL,
             'MessageBody' => $payload,
@@ -142,7 +175,8 @@ class SQS implements \QueueSystem\QueueInterface
     {
         while (1) {
             try {
-                echo "[" . getmypid() . "] Parent" . PHP_EOL;
+                $this->logger->info("[" . getmypid() . "] Parent");
+                $this->logger->info("Receiving Messages, Max limit {$count}");
                 $this->receiveMessages($count);
                 //check for empty message list.
                 if (!(empty($this->messages))) {
@@ -159,10 +193,10 @@ class SQS implements \QueueSystem\QueueInterface
                 //reset sleep timer.
             } catch (\Exception $e) {
             	if ($e->getCode() != self::ERR_NO_MESSAGE_CODE) {
-            		//@todo: log eror before continuing.
-            		echo $e->getMessage();
+            	    $this->logger->critical('ERR: '.$e->getMessage(), $e);
             	}
                 $sleepTime = $this->sleepTimer->getSleepTime();
+                $this->logger->info("Sleeping for {$sleepTime} seconds");
                 sleep($sleepTime);
                 continue;
             }
