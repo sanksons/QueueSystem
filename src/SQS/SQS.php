@@ -1,17 +1,7 @@
 <?php
 namespace QueueSystem\SQS;
 
-/**
- * Load the required classes.
- * @todo: Use autoloading if time permits.
- */
-//require_once('vendor/autoload.php');
-//require_once dirname(dirname(__FILE__)) . '/QueueInterface.php';
-//require_once dirname(dirname(__FILE__)) . '/WorkerPool.php';
-//require_once dirname(dirname(__FILE__)) . '/WorkProcess.php';
-//require_once dirname(dirname(__FILE__)) . '/Message.php';
-//require_once dirname(dirname(__FILE__)) . '/SQS/SleepTimer.php';
-
+use QueueSystem\Utils;
 
 /**
  *  SQS Q Implementation.
@@ -43,6 +33,11 @@ class SQS implements \QueueSystem\QueueInterface
     private $workerPool = NULL;
 
     /**
+     * @var Katzgrau\KLogger\Logger
+     */
+    public  $logger = NULL;
+
+    /**
      * Expects SQS related options to be passed as Params.
      * $options['client']['region'] : Region to which the Q belongs.
      *  
@@ -56,6 +51,11 @@ class SQS implements \QueueSystem\QueueInterface
      */
     public function __construct($options = array())
     {
+        //initiate logger
+        //@todo: bring path and level from outside.
+        $this->logger = \QueueSystem\Utils::getLogger();
+        $this->logger->info('Creating SQS instance with following options:', $options);
+        
         $clientOptions = array();
         if (!empty($options['client'])) {
             $clientOptions = $options['client'];
@@ -77,6 +77,8 @@ class SQS implements \QueueSystem\QueueInterface
             $maxWorkers = (int) $options['maxWorkers'];
         }
         $this->workerPool = new \QueueSystem\WorkerPool($maxWorkers);
+        
+        
     }
 
     /**

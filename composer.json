@@ -17,7 +17,8 @@
   "require": {
     "php": ">=5.3.0",
     "aws/aws-sdk-php": "^2.0",
-    "jenner/simple_fork": "1.1.2"
+    "jenner/simple_fork": "1.1.2",
+    "katzgrau/klogger": "1.2.1"
   },
   "autoload": {
     "psr-4": {
