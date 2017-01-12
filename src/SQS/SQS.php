@@ -50,7 +50,7 @@ class SQS implements \QueueSystem\QueueInterface
      *  
      * $options['logger'] : settings for logger.
      *    - filePath : path to write log file.
-     *    - level    : log level to be used.
+     *    - level    : (string) log level to be used.
      *    - fileName :  filename without extension.
      *  
      * $options['maxWorkers'] : max. allowed parallel workers.  
@@ -75,7 +75,7 @@ class SQS implements \QueueSystem\QueueInterface
         $pollSettings = NULL;
         if (! empty($options['pollSettings']['formula']) &&
                          ! empty($options['pollSettings']['variant'])) {
-            $this->logger->info('Using following Poll Settings:', $pollSettings);                 
+            $this->logger->info('Using following Poll Settings:', array($pollSettings));                 
             $this->sleepTimer = new SleepTimer($options['pollSettings']['formula'], 
                             $options['pollSettings']['variant']);
         } else {
@@ -86,10 +86,8 @@ class SQS implements \QueueSystem\QueueInterface
         if (!empty($options['maxWorkers'])) {
             $maxWorkers = (int) $options['maxWorkers'];
         }
-        $this->logger->info('Creating Worker Pool with worker count :', $maxWorkers);
+        $this->logger->info('Creating Worker Pool with worker count :', array($maxWorkers));
         $this->workerPool = new \QueueSystem\WorkerPool($maxWorkers);
-        
-        
     }
     
     /**
@@ -155,7 +153,7 @@ class SQS implements \QueueSystem\QueueInterface
             );
         }
         $this->logger->info("[pid:{".getmypid()."}] Publishing Message.");
-        $this->logger->debug("Published Message Content:", $payload);
+        $this->logger->debug("Published Message Content:  {$payload}");
         $this->client->sendMessage(array(
             'QueueUrl' => $this->qURL,
             'MessageBody' => $payload,
@@ -178,6 +176,7 @@ class SQS implements \QueueSystem\QueueInterface
                 $this->logger->info("[" . getmypid() . "] Parent");
                 $this->logger->info("Receiving Messages, Max limit {$count}");
                 $this->receiveMessages($count);
+                $this->logger->info("Received ".count($this->messages)." Messages");
                 //check for empty message list.
                 if (!(empty($this->messages))) {
                 	$this->sleepTimer->resetSleepTimer();
@@ -193,7 +192,11 @@ class SQS implements \QueueSystem\QueueInterface
                 //reset sleep timer.
             } catch (\Exception $e) {
             	if ($e->getCode() != self::ERR_NO_MESSAGE_CODE) {
-            	    $this->logger->critical('ERR: '.$e->getMessage(), $e);
+            	    $exceptionData = array(
+            	        'ErrMsg' => $e->getMessage(),
+            	        'ErrCode' => $e->getCode(),
+            	    ); 
+            	    $this->logger->critical('ERR: Exception occurred in QueueSystem\SQS\subscribe()', $exceptionData);
             	}
                 $sleepTime = $this->sleepTimer->getSleepTime();
                 $this->logger->info("Sleeping for {$sleepTime} seconds");
