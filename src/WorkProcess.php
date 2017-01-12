@@ -20,7 +20,7 @@ class WorkProcess extends \Jenner\SimpleFork\Process
      * @param string|array $message
      * @return \QueueSystem\WorkProcess
      */
-    public function setMessage(QueueSystem\Message $message) {
+    public function setMessage(Message $message) {
         $this->message = $message;
         return $this;
     } 
