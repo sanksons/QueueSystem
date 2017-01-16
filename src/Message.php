@@ -40,7 +40,7 @@ class Message
             $this->setBody($data['body']);
         }
         if (! empty($data['messageId'])) {
-            $this->getMessageId($data['messageId']);
+            $this->setMessageId($data['messageId']);
         }
         
         if (!empty($data['meta'])) {

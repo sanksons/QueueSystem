@@ -60,7 +60,7 @@ class WorkProcess extends \Jenner\SimpleFork\Process
     public function run()
     {
         try {
-            $this->logger->info('Processing message:', $this->message->getMessageId());
+            $this->logger->info('Processing message:', array($this->message->getMessageId()));
             $result = call_user_func($this->callback, $this->message);
             call_user_func($this->onJobDone, $this->message);
             return true;
