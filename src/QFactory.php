@@ -12,7 +12,7 @@ class QFactory
         $client = NULL;
         switch ($type) {
             case self::TYPE_SQS:
-                $client = new SQS\SQS($options);
+                $client = new SQS\SQS3($options);
                 break;
             case self::TYPE_RABBITMQ:
                 throw new Exception('RabbitMQ is not currently supported');
