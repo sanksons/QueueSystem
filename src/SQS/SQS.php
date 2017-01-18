@@ -24,6 +24,9 @@ class SQS implements \QueueSystem\QueueInterface
     const ERR_NO_MESSAGE_MSG = 'No Message Found.';
     const ERR_NO_MESSAGE_CODE = 100;
     
+    //there are cases where SQS gives false alarm (0 messages), even though message exists in Queue.
+    const FALSE_ALARM_TOLERANCE = 3;
+    
     //Object of Aws\Sqs\SqsClient
     //Stores connection Client to AWS. 
     private $client;
@@ -293,6 +296,8 @@ class SQS implements \QueueSystem\QueueInterface
         //NOTE: Bcoz SQS does not support more than 10 messages in single call.
         $sqsFetchLimit = ($maxCount >= 10) ? 10 : $maxCount;
         $queuedMsgCount = count($this->messages);
+        $tolerance = 0;
+        
         while ($queuedMsgCount < $maxCount) {
             $fetchLimit = $sqsFetchLimit;
             if (($maxCount - $queuedMsgCount) < $sqsFetchLimit) {
@@ -305,6 +310,10 @@ class SQS implements \QueueSystem\QueueInterface
             ));
             $tmpMessages = $result->get('Messages');
             if (empty($tmpMessages)) {
+                if ($tolerance < self::FALSE_ALARM_TOLERANCE) {
+                    $tolerance++;
+                    continue;
+                }
                 break;
             }
             $this->messages = array_merge($this->messages, $tmpMessages);
