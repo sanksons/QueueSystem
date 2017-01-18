@@ -64,7 +64,7 @@ class SQS implements \QueueSystem\QueueInterface
     {
         //initiate logger
         //@todo: bring path and level from outside.
-        $ls = self::getLoggerSettings($options);
+        $ls = static::getLoggerSettings($options);
         $this->logger = \QueueSystem\Utils::getLogger($ls['filePath'], $ls['level'],$ls['fileName']);
         $this->logger->info('Creating SQS instance with following options:', $options);
         
@@ -85,7 +85,7 @@ class SQS implements \QueueSystem\QueueInterface
             $this->sleepTimer = new SleepTimer();
         }
         //define max allowed workers.
-        $maxWorkers = self::MAX_CHILDS;
+        $maxWorkers = static::MAX_CHILDS;
         if (!empty($options['maxWorkers'])) {
             $maxWorkers = (int) $options['maxWorkers'];
         }
@@ -119,13 +119,13 @@ class SQS implements \QueueSystem\QueueInterface
      * @param array $options
      * @return object Aws\Sqs\SqsClient
      */
-    private function getClient($options = array())
+    protected function getClient($options = array())
     {
         if (empty($options['region'])) {
-            $options['region'] = self::DEF_REGION;
+            $options['region'] = static::DEF_REGION;
         }
         $client = \Aws\Sqs\SqsClient::factory(array(
-                'region' => self::DEF_REGION,
+                'region' => static::DEF_REGION,
         ));
         return $client;
     }
@@ -152,7 +152,7 @@ class SQS implements \QueueSystem\QueueInterface
     {
         if (!$this->isQueueDeclared()) {
             throw new \Exception(
-            self::ERR_MSG_QNOT_DECLARED
+            static::ERR_MSG_QNOT_DECLARED
             );
         }
         $this->logger->info("[pid:{".getmypid()."}] Publishing Message.");
@@ -191,10 +191,10 @@ class SQS implements \QueueSystem\QueueInterface
                 	$this->workerPool->wait(true, 3 * 1000000);
                 	continue;
                 }
-                throw new \RuntimeException(self::ERR_NO_MESSAGE_MSG, self::ERR_NO_MESSAGE_CODE);
+                throw new \RuntimeException(static::ERR_NO_MESSAGE_MSG, static::ERR_NO_MESSAGE_CODE);
                 //reset sleep timer.
             } catch (\Exception $e) {
-            	if ($e->getCode() != self::ERR_NO_MESSAGE_CODE) {
+            	if ($e->getCode() != static::ERR_NO_MESSAGE_CODE) {
             	    $exceptionData = array(
             	        'ErrMsg' => $e->getMessage(),
             	        'ErrCode' => $e->getCode(),
@@ -306,11 +306,11 @@ class SQS implements \QueueSystem\QueueInterface
             $result = $this->client->receiveMessage(array(
                 'QueueUrl' => $this->qURL,
                 'MaxNumberOfMessages' => $fetchLimit,
-                'WaitTimeSeconds' => self::DEF_POLL_TIME,
+                'WaitTimeSeconds' => static::DEF_POLL_TIME,
             ));
             $tmpMessages = $result->get('Messages');
             if (empty($tmpMessages)) {
-                if ($tolerance < self::FALSE_ALARM_TOLERANCE) {
+                if ($tolerance < static::FALSE_ALARM_TOLERANCE) {
                     $tolerance++;
                     continue;
                 }
