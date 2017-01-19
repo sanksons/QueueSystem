@@ -1,7 +1,6 @@
 {
   "name": "sanksons/queue-system",
   "description": "A univarsal wrapper for available QueueSystems. like SQS, rabbitMQ, zeroMQ etc.",
-  "version": "1.0.0",
   "keywords": [
     "queuesystem",
     "sqs"
