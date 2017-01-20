@@ -4,6 +4,9 @@ namespace QueueSystem\SQS;
 /**
  * SQS V3 Implementation for Queue System.
  * 
+ * This is an extension of SQS class for V3 of AWS SDK.
+ * FOR V2 of AWS SDK use SQS class as it is. 
+ * 
  * @author Sankalp Bhatt
  *
  */
