@@ -1,5 +1,7 @@
 <?php 
 
+require_once 'vendor/autoload.php';
+
 spl_autoload_register(function ($classname) {
     $dir = dirname(__FILE__) . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR;
     if (strpos($classname, "QueueSystem\\SQS\\") === 0) {
