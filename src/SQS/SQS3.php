@@ -14,7 +14,7 @@ class SQS3 extends SQS implements \QueueSystem\QueueInterface
 {
     private $httpTimeout = 5; //seconds
     private $http = true;
-    private $stats = true;
+    
     
     
     

@@ -37,6 +37,7 @@ class SQS implements \QueueSystem\QueueInterface
     //Object of SleepTimer.
     private $sleepTimer = NULL;
     private $workerPool = NULL;
+    protected $stats = true;
 
     /**
      * @var Katzgrau\KLogger\Logger
@@ -283,9 +284,7 @@ class SQS implements \QueueSystem\QueueInterface
             'ReceiptHandle' => $receiptHandle,
         ));
         if ($this->isStatsEnabled()) {
-           //echo '#########################'.PHP_EOL; 
-           //print_r($result['@metadata']);    
-           //echo '#########################'.PHP_EOL;
+           $this->logTransferStats($result);
         }
         
         return true;
@@ -314,6 +313,9 @@ class SQS implements \QueueSystem\QueueInterface
                 'MaxNumberOfMessages' => $fetchLimit,
                 'WaitTimeSeconds' => static::DEF_POLL_TIME,
             ));
+            if ($this->isStatsEnabled()) {
+                 $this->logTransferStats($result);
+            }
             $tmpMessages = $result->get('Messages');
             if (empty($tmpMessages)) {
                 if ($tolerance < static::FALSE_ALARM_TOLERANCE) {
@@ -339,4 +341,13 @@ class SQS implements \QueueSystem\QueueInterface
         }
         return false;
     }
+    
+    
+    protected function logTransferStats($result = null) {
+         if(empty($result['transferStats'])) {
+             return;
+         }
+         $this->logger->info("STATS:", $result['transferStats']);
+    }
+    
 }
