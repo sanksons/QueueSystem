@@ -12,14 +12,31 @@ namespace QueueSystem\SQS;
  */
 class SQS3 extends SQS implements \QueueSystem\QueueInterface
 {
+    private $httpTimeout = 5; //seconds
+    private $http = true;
+    private $stats = true;
+    
+    
     
     protected function getClient($options = array())
     {
         if (empty($options['region'])) {
             $options['region'] = static::DEF_REGION;
         }
+        
+        if ($this->stats) {
+            $stats = array(
+                'retries'      => true,
+                'timer'        => true,
+                'http'         => true,
+            );    
+        }
         $sdk = new \Aws\Sdk([
             'region'   => $options['region'],
+            'http' => array(
+                'timeout' => $this->httpTimeout,
+            ),
+            'stats'   => $stats,
         ]);
         $client = $sdk->createClient('sqs',['version'=>'2012-11-05']);
         return $client;

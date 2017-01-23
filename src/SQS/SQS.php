@@ -249,7 +249,7 @@ class SQS implements \QueueSystem\QueueInterface
                 $workProcess = new \QueueSystem\WorkProcess();
                 $workProcess->setcallback($callback)
                     ->setMessage($msg)
-                    ->onJobDone(array($this, 'markDeleted'))
+                    ->beforeJobStart(array($this, 'markDeleted'))
                     ->setLogger($this->logger);
                 $pool->execute($workProcess);
             } catch (\Exception $e) {
@@ -278,10 +278,16 @@ class SQS implements \QueueSystem\QueueInterface
         if (isset($meta['ReceiptHandle'])) {
             $receiptHandle = $meta['ReceiptHandle'];
         }
-        $this->client->deleteMessage(array(
+        $result = $this->client->deleteMessage(array(
             'QueueUrl' => $this->qURL,
             'ReceiptHandle' => $receiptHandle,
         ));
+        if ($this->isStatsEnabled()) {
+           //echo '#########################'.PHP_EOL; 
+           //print_r($result['@metadata']);    
+           //echo '#########################'.PHP_EOL;
+        }
+        
         return true;
     }
 
@@ -320,5 +326,17 @@ class SQS implements \QueueSystem\QueueInterface
             $queuedMsgCount = count($this->messages);
         }
         
+    }
+    
+    /**
+     * Check if Stats enabled.
+     * 
+     * @return boolean
+     */
+    protected function isStatsEnabled() {
+        if ($this->stats) {
+            return true;
+        }
+        return false;
     }
 }

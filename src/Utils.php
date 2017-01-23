@@ -13,6 +13,7 @@ class Utils {
     const DEF_LEVEL = \Psr\Log\LogLevel::DEBUG;
     const DEF_FILE_NAME = 'queuesystem';
     
+    
     /**
      * Get Logger Instance;
      * 
@@ -24,6 +25,18 @@ class Utils {
     public static function getLogger($path = self::DEF_PATH, $level = self::DEF_LEVEL, $fileName = self::DEF_FILE_NAME) {
         $fileName =  $fileName.'-'.date('Y-m-d'). '.log';
         return new \Katzgrau\KLogger\Logger($path, $level, array('filename' => $fileName));
+    }
+    
+    /**
+     * 
+     * @param unknown $func
+     */
+    public static function isCallable($func = null) {
+        
+        if (!empty($func) && is_callable($func)) {
+            return true;     
+        }
+        return false;
     }
     
 }
