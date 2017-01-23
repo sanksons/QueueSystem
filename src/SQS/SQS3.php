@@ -16,8 +16,6 @@ class SQS3 extends SQS implements \QueueSystem\QueueInterface
     private $http = true;
     
     
-    
-    
     protected function getClient($options = array())
     {
         if (empty($options['region'])) {

@@ -344,10 +344,10 @@ class SQS implements \QueueSystem\QueueInterface
     
     
     protected function logTransferStats($result = null) {
-         if(empty($result['transferStats'])) {
+         if(empty($result['@metadata']['transferStats'])) {
              return;
          }
-         $this->logger->info("STATS:", $result['transferStats']);
+         $this->logger->info("STATS:", $result['@metadata']['transferStats']);
     }
     
 }
