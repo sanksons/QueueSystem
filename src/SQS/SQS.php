@@ -5,119 +5,182 @@ use QueueSystem\Utils;
 
 /**
  * SQS Implementation for Queue System.
- * 
- * @author Sankalp Bhatt
  *
+ * @author Sankalp Bhatt
+ *        
  */
 class SQS implements \QueueSystem\QueueInterface
 {
-    //Default region to use when none is specified.
+    // Default region to use when none is specified.
     const DEF_REGION = "eu-central-1";
-    //Maximum messages that can be received in single call.
+    // Long Poll wait time.
+    const DEF_POLL_TIME = 1;
+    // Maximum messages that can be received in single call.
     const MAX_MSG_2_RECEIVE = 5;
-    //Long Poll wait time.
-    const DEF_POLL_TIME = 1; //seconds
-    //Max Workers to be run in Parallel.
+    // Max Workers to be run in Parallel.
     const MAX_CHILDS = 2;
-    //Error message for Queue not declared.
+    // Error message for Queue not declared.
     const ERR_MSG_QNOT_DECLARED = 'You need to declare a Queue before publishing message, see: declareQueue().';
     const ERR_NO_MESSAGE_MSG = 'No Message Found.';
     const ERR_NO_MESSAGE_CODE = 100;
-    
-    //there are cases where SQS gives false alarm (0 messages), even though message exists in Queue.
+    // there are cases where SQS gives false alarm (0 messages), even though message exists in Queue.
     const FALSE_ALARM_TOLERANCE = 3;
     
-    //Object of Aws\Sqs\SqsClient
-    //Stores connection Client to AWS. 
+    const MICRO_SECONDS = 1000000;
+    
+    /**
+     * Stores connection Client to AWS.
+     * 
+     * @var Object of Aws\Sqs\SqsClient
+     */
     private $client;
-    //URL of SQS queue
+    
+    /**
+     * URL of SQS Queue.
+     * 
+     * @var string
+     */
     private $qURL;
-    //Contains Queue of messages to be processed
+    
+    /**
+     * Queue of Messages to be processed.
+     * 
+     * @var array
+     */
     private $messages = array();
-    //Object of SleepTimer.
+    
+    /**
+     * @var (object) SleepTimer
+     */
     private $sleepTimer = NULL;
+    
+    /**
+     * @var (object) \QueueSystem\WorkerPool
+     */
     private $workerPool = NULL;
-    protected $stats = true;
 
     /**
+     * Do we need to log stats of calls made to SQS.
+     * 
+     * @var boolean
+     */
+    protected $stats = false;
+
+    /**
+     * Http Timeout during AWS call [seconds].
+     *
+     * @var integer
+     */
+    protected $httpTimeout = 5;
+    
+    /**
+     *
      * @var Katzgrau\KLogger\Logger
      */
-    public  $logger = NULL;
+    public $logger = NULL;
 
     /**
      * Expects SQS related options to be passed as Params.
+     *
      * $options['client']['region'] : Region to which the Q belongs.
-     *  
+     * $options['client']['stats'] : LOG Http Call transfer Stats.
+     *
      * $options['pollSettings'] : Settings related to polling.
-     *  - formula : poll formula to use.
-     *  - variant : poll formula variant.
-     *  
+     * - formula : poll formula to use.
+     * - variant : poll formula variant.
+     *
      * $options['logger'] : settings for logger.
-     *    - filePath : path to write log file.
-     *    - level    : (string) log level to be used.
-     *    - fileName :  filename without extension.
-     *  
-     * $options['maxWorkers'] : max. allowed parallel workers.  
-     * 
-     * @param array $options
+     * - filePath : path to write log file.
+     * - level : (string) log level to be used.
+     * - fileName : filename without extension.
+     *
+     * $options['maxWorkers'] : max. allowed parallel workers.
+     *
+     * @param array $options            
      */
     public function __construct($options = array())
     {
-        //initiate logger
-        //@todo: bring path and level from outside.
-        $ls = static::getLoggerSettings($options);
-        $this->logger = \QueueSystem\Utils::getLogger($ls['filePath'], $ls['level'],$ls['fileName']);
-        $this->logger->info('Creating SQS instance with following options:', $options);
+        //Initialize Logger.
+        $this->initLogger($options);
         
-        $clientOptions = array();
-        if (!empty($options['client'])) {
-            $clientOptions = $options['client'];
-        }
-        $this->client = $this->getClient($clientOptions);
+        //Initialize SQS Client. 
+        $this->initSQSClient($options);
         
-        //declare SleepTimer object
-        $pollSettings = NULL;
-        if (! empty($options['pollSettings']['formula']) &&
-                         ! empty($options['pollSettings']['variant'])) {
-            $this->logger->info('Using following Poll Settings:', array($pollSettings));                 
-            $this->sleepTimer = new SleepTimer($options['pollSettings']['formula'], 
-                            $options['pollSettings']['variant']);
-        } else {
-            $this->sleepTimer = new SleepTimer();
-        }
-        //define max allowed workers.
+        //Initialize SleepTimer.
+        $this->initSleepTimer($options);
+        
+        //Calculate Max Workers and Initialize WorkerPool.
+        $this->initWorkerPool($options);
+    }
+    
+    /**
+     * Initialize worker pool.
+     * 
+     * @param array $options
+     */
+    protected function initWorkerPool($options = array())
+    {
         $maxWorkers = static::MAX_CHILDS;
-        if (!empty($options['maxWorkers'])) {
+        if (! empty($options['maxWorkers'])) {
             $maxWorkers = (int) $options['maxWorkers'];
         }
-        $this->logger->info('Creating Worker Pool with worker count :', array($maxWorkers));
+        $this->logger->info('Creating Worker Pool with worker count :', array(
+            $maxWorkers
+        ));
         $this->workerPool = new \QueueSystem\WorkerPool($maxWorkers);
     }
     
     /**
-     * Prepare logger specific settings.
+     * Initialize sleep Timer.
      * 
      * @param array $options
-     * @return array
      */
-    private static function getLoggerSettings($options = array()) {
-        $ret = array(
-            'filePath' =>  Utils::DEF_PATH,
-            'level' =>     Utils::DEF_LEVEL,
-            'fileName' =>  Utils::DEF_FILE_NAME,
-        );
-        foreach($ret as $key => $val) {
-            if (!empty($options['logger'][$key])) {
-                $ret[$key] = $options['logger'][$key];
-            }
+    protected function initSleepTimer($options = array())
+    {
+        $pollSettings = NULL;
+        if (! empty($options['pollSettings']['formula']) && ! empty($options['pollSettings']['variant'])) {
+            $this->logger->info('Using following Poll Settings:', array(
+                $pollSettings
+            ));
+            $this->sleepTimer = new SleepTimer(
+                $options['pollSettings']['formula'], 
+                $options['pollSettings']['variant']
+            );
+        } else {
+            $this->sleepTimer = new SleepTimer();
         }
-        return $ret;
+    }
+
+    /**
+     * Initialize logger object.
+     * 
+     * @param array $options : options to use.
+     */
+    protected function initLogger($options = array())
+    {
+        $ls = Utils::getLoggerSettings($options);
+        $this->logger = \QueueSystem\Utils::getLogger($ls['filePath'], $ls['level'], $ls['fileName']);
+        $this->logger->info('Creating SQS instance with following options:', $options);
+    }
+    
+    /**
+     * Initialize SQS Client.
+     * 
+     * @param array $options
+     */
+    protected function initSQSClient($options = array()) 
+    {
+        $clientOptions = array();
+        if (! empty($options['client'])) {
+            $clientOptions = $options['client'];
+        }
+        $this->client = $this->getClient($clientOptions);
     }
 
     /**
      * Create a Client connection to SQS service.
-     * 
-     * @param array $options
+     *
+     * @param array $options            
      * @return object Aws\Sqs\SqsClient
      */
     protected function getClient($options = array())
@@ -126,15 +189,15 @@ class SQS implements \QueueSystem\QueueInterface
             $options['region'] = static::DEF_REGION;
         }
         $client = \Aws\Sqs\SqsClient::factory(array(
-                'region' => static::DEF_REGION,
+            'region' => static::DEF_REGION
         ));
         return $client;
     }
 
     /**
      * Specify SQS Queue URL.
-     * 
-     * @param string $queueName
+     *
+     * @param string $queueName            
      * @return object SQS
      */
     public function declareQueue($queueName)
@@ -145,63 +208,64 @@ class SQS implements \QueueSystem\QueueInterface
 
     /**
      * Publish Message to Queue.
-     * 
-     * @param string $message
-     * @return boolean| Exception
+     *
+     * @param string $message            
+     * @return boolean Exception
      */
     public function publish($payload)
     {
-        if (!$this->isQueueDeclared()) {
-            throw new \Exception(
-            static::ERR_MSG_QNOT_DECLARED
-            );
+        if (! $this->isQueueDeclared()) {
+            throw new \Exception(static::ERR_MSG_QNOT_DECLARED);
         }
-        $this->logger->info("[pid:{".getmypid()."}] Publishing Message.");
+        $this->logger->info("[pid:{" . getmypid() . "}] Publishing Message.");
         $this->logger->debug("Published Message Content:  {$payload}");
-        $this->client->sendMessage(array(
+        $result = $this->client->sendMessage(array(
             'QueueUrl' => $this->qURL,
-            'MessageBody' => $payload,
+            'MessageBody' => $payload
         ));
+        $this->logTransferStats($result, 'Publish Request:');
         return true;
     }
 
     /**
      * Subscribe for messages to Queue.
-     * 
-     * @param array|string $callback : Callback to be called on each message.  
-     * @param int $count : Messages to receive in single call.
-     * 
+     *
+     * @param array|string $callback
+     *            : Callback to be called on each message.
+     * @param int $count
+     *            : Messages to receive in single call.
+     *            
      * @throws Exception
      */
-    public function subscribe($callback = NULL, $count = self::MAX_MSG_2_RECEIVE)
+    public function subscribe($callback = NULL, $count = self::MAX_MSG_2_RECEIVE, $waitTime = self::DEF_POLL_TIME)
     {
         while (1) {
             try {
                 $this->logger->info("[" . getmypid() . "] Parent");
                 $this->logger->info("Receiving Messages, Max limit {$count}");
-                $this->receiveMessages($count);
-                $this->logger->info("Received ".count($this->messages)." Messages");
-                //check for empty message list.
-                if (!(empty($this->messages))) {
-                	$this->sleepTimer->resetSleepTimer();
-                	$this->processMessages($callback);
-                	continue;
+                $this->receiveMessages($count, $waitTime);
+                $this->logger->info("Received " . count($this->messages) . " Messages");
+                // check for empty message list.
+                if (! (empty($this->messages))) {
+                    $this->sleepTimer->resetSleepTimer();
+                    $this->processMessages($callback);
+                    continue;
                 }
-                //no message
+                // no message
                 if ($this->workerPool->isAnyJobPending()) {
-                	$this->workerPool->wait(true, 3 * 1000000);
-                	continue;
+                    $this->workerPool->wait(true, 3 * self::MICRO_SECONDS);
+                    continue;
                 }
                 throw new \RuntimeException(static::ERR_NO_MESSAGE_MSG, static::ERR_NO_MESSAGE_CODE);
-                //reset sleep timer.
+                // reset sleep timer.
             } catch (\Exception $e) {
-            	if ($e->getCode() != static::ERR_NO_MESSAGE_CODE) {
-            	    $exceptionData = array(
-            	        'ErrMsg' => $e->getMessage(),
-            	        'ErrCode' => $e->getCode(),
-            	    ); 
-            	    $this->logger->critical('ERR: Exception occurred in QueueSystem\SQS\subscribe()', $exceptionData);
-            	}
+                if ($e->getCode() != static::ERR_NO_MESSAGE_CODE) {
+                    $exceptionData = array(
+                        'ErrMsg' => $e->getMessage(),
+                        'ErrCode' => $e->getCode()
+                    );
+                    $this->logger->critical('ERR: Exception occurred in QueueSystem\SQS\subscribe()', $exceptionData);
+                }
                 $sleepTime = $this->sleepTimer->getSleepTime();
                 $this->logger->info("Sleeping for {$sleepTime} seconds");
                 sleep($sleepTime);
@@ -212,6 +276,7 @@ class SQS implements \QueueSystem\QueueInterface
 
     /**
      * Check if Queue is already declared or not
+     * 
      * @return boolean
      */
     private function isQueueDeclared()
@@ -224,52 +289,57 @@ class SQS implements \QueueSystem\QueueInterface
 
     /**
      * Process message data.
-     * 
-     * @param array $messages
-     * @param callable $callback
+     *
+     * @param array $messages            
+     * @param callable $callback            
      * @return boolean
      */
     private function processMessages($callback)
     {
         if (empty($this->messages)) {
-            //no messages to process, simply return.
+            // no messages to process, simply return.
             return;
         }
-        if ((!is_callable($callback))) {
+        if ((! is_callable($callback))) {
             throw new \RuntimeException('Not a callable callback.');
         }
-        //create a child process pool.
+        // create a child process pool.
         $pool = $this->workerPool;
         foreach ($this->messages as $message) {
             try {
                 $msg = new \QueueSystem\Message(array(
                     'body' => $message['Body'],
                     'messageId' => $message['MessageId'],
-                    'meta' => array('ReceiptHandle' => $message['ReceiptHandle'])
+                    'meta' => array(
+                        'ReceiptHandle' => $message['ReceiptHandle']
+                    )
                 ));
                 $workProcess = new \QueueSystem\WorkProcess();
                 $workProcess->setcallback($callback)
                     ->setMessage($msg)
-                    ->beforeJobStart(array($this, 'markDeleted'))
+                    ->beforeJobStart(array(
+                    $this,
+                    'markDeleted'
+                ))
                     ->setLogger($this->logger);
                 $pool->execute($workProcess);
             } catch (\Exception $e) {
-            	echo 'process message failed;';
+                echo 'process message failed;';
                 echo $e->getMessage();
             }
         }
-        //reset messages.
+        // reset messages.
         $this->messages = array();
-        $pool->wait(true, 3 * 1000000);
+        $pool->wait(true, 3 * self::MICRO_SECONDS);
     }
 
     /**
      * Mark the message Deleted, so that it is not returned again.
      * $message['ReceiptHandle'] : Message Identifier to be used in delete call.
-     * 
-     * @todo: Check for responses from delete message call.
-     * 
-     * @param array $message
+     *
+     * @todo : Check for responses from delete message call.
+     *      
+     * @param array $message            
      * @return type
      */
     public function markDeleted(\QueueSystem\Message $message)
@@ -281,24 +351,22 @@ class SQS implements \QueueSystem\QueueInterface
         }
         $result = $this->client->deleteMessage(array(
             'QueueUrl' => $this->qURL,
-            'ReceiptHandle' => $receiptHandle,
+            'ReceiptHandle' => $receiptHandle
         ));
-        if ($this->isStatsEnabled()) {
-           $this->logTransferStats($result);
-        }
+        $this->logTransferStats($result, 'Delete Request:');
         
         return true;
     }
 
     /**
      * Try to fetch messages from SQS.
-     * 
-     * @param int $maxCount
+     *
+     * @param int $maxCount            
      * @return array
      */
-    private function receiveMessages($maxCount)
+    private function receiveMessages($maxCount, $waitTime)
     {
-        //NOTE: Bcoz SQS does not support more than 10 messages in single call.
+        // NOTE: Bcoz SQS does not support more than 10 messages in single call.
         $sqsFetchLimit = ($maxCount >= 10) ? 10 : $maxCount;
         $queuedMsgCount = count($this->messages);
         $tolerance = 0;
@@ -311,15 +379,14 @@ class SQS implements \QueueSystem\QueueInterface
             $result = $this->client->receiveMessage(array(
                 'QueueUrl' => $this->qURL,
                 'MaxNumberOfMessages' => $fetchLimit,
-                'WaitTimeSeconds' => static::DEF_POLL_TIME,
+                'WaitTimeSeconds' => $waitTime
             ));
-            if ($this->isStatsEnabled()) {
-                 $this->logTransferStats($result);
-            }
+            
+            $this->logTransferStats($result, 'Receive Request:'); // log stats
             $tmpMessages = $result->get('Messages');
             if (empty($tmpMessages)) {
                 if ($tolerance < static::FALSE_ALARM_TOLERANCE) {
-                    $tolerance++;
+                    $tolerance ++;
                     continue;
                 }
                 break;
@@ -327,27 +394,32 @@ class SQS implements \QueueSystem\QueueInterface
             $this->messages = array_merge($this->messages, $tmpMessages);
             $queuedMsgCount = count($this->messages);
         }
-        
     }
-    
+
     /**
      * Check if Stats enabled.
-     * 
+     *
      * @return boolean
      */
-    protected function isStatsEnabled() {
+    protected function isStatsEnabled()
+    {
         if ($this->stats) {
             return true;
         }
         return false;
     }
-    
-    
-    protected function logTransferStats($result = null) {
-         if(empty($result['@metadata']['transferStats'])) {
-             return;
-         }
-         $this->logger->info("STATS:", $result['@metadata']['transferStats']);
+
+    /**
+     * Log Stats of Http Transfer.
+     *
+     * @param array  $result
+     * @param string $type            
+     */
+    protected function logTransferStats($result = null, $type = '')
+    {
+        if (empty($result['@metadata']['transferStats']) || (! $this->isStatsEnabled())) {
+            return;
+        }
+        $this->logger->debug("STATS {$type}:", $result['@metadata']['transferStats']);
     }
-    
 }
