@@ -366,33 +366,38 @@ class SQS implements \QueueSystem\QueueInterface
      */
     private function receiveMessages($maxCount, $waitTime)
     {
-        // NOTE: Bcoz SQS does not support more than 10 messages in single call.
-        $sqsFetchLimit = ($maxCount >= 10) ? 10 : $maxCount;
-        $queuedMsgCount = count($this->messages);
-        $tolerance = 0;
-        
-        while ($queuedMsgCount < $maxCount) {
-            $fetchLimit = $sqsFetchLimit;
-            if (($maxCount - $queuedMsgCount) < $sqsFetchLimit) {
-                $fetchLimit = $maxCount - $queuedMsgCount;
-            }
-            $result = $this->client->receiveMessage(array(
-                'QueueUrl' => $this->qURL,
-                'MaxNumberOfMessages' => $fetchLimit,
-                'WaitTimeSeconds' => $waitTime
-            ));
-            
-            $this->logTransferStats($result, 'Receive Request:'); // log stats
-            $tmpMessages = $result->get('Messages');
-            if (empty($tmpMessages)) {
-                if ($tolerance < static::FALSE_ALARM_TOLERANCE) {
-                    $tolerance ++;
-                    continue;
-                }
-                break;
-            }
-            $this->messages = array_merge($this->messages, $tmpMessages);
+        try {
+            // NOTE: Bcoz SQS does not support more than 10 messages in single call.
+            $sqsFetchLimit = ($maxCount >= 10) ? 10 : $maxCount;
             $queuedMsgCount = count($this->messages);
+            $tolerance = 0;
+            
+            while ($queuedMsgCount < $maxCount) {
+                $fetchLimit = $sqsFetchLimit;
+                if (($maxCount - $queuedMsgCount) < $sqsFetchLimit) {
+                    $fetchLimit = $maxCount - $queuedMsgCount;
+                }
+                $result = $this->client->receiveMessage(array(
+                    'QueueUrl' => $this->qURL,
+                    'MaxNumberOfMessages' => $fetchLimit,
+                    'WaitTimeSeconds' => $waitTime
+                ));
+                
+                $this->logTransferStats($result, 'Receive Request:'); // log stats
+                $tmpMessages = $result->get('Messages');
+                if (empty($tmpMessages)) {
+                    if ($tolerance < static::FALSE_ALARM_TOLERANCE) {
+                        $tolerance ++;
+                        continue;
+                    }
+                    break;
+                }
+                $this->messages = array_merge($this->messages, $tmpMessages);
+                $queuedMsgCount = count($this->messages);
+            }
+        } catch (\Exception $e) {
+            $msg = "SQS->receiveMessages(): ". $e->getMessage();
+            throw new \Exception($msg);
         }
     }
 
