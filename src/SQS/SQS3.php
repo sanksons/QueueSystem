@@ -29,6 +29,7 @@ class SQS3 extends SQS implements \QueueSystem\QueueInterface
         if (!empty($options['stats'])) {
            $this->stats = (bool) $options['stats'];
         }
+        $stats = false;
         if ($this->stats) {
             $stats = array(
                 'retries'      => true,
